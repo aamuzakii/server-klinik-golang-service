@@ -2,54 +2,69 @@ package main
 
 import (
 	"net/http"
-
+	"example.com/web-service-gin/models"
 	"github.com/gin-gonic/gin"
 	_ "github.com/lib/pq"
-	"github.com/astaxie/beego/orm"
+ 	"github.com/astaxie/beego/orm"
+	 "fmt"
 )
 
-type album struct {
-	ID     string  `json:"id"`
-	Title  string  `json:"title"`
-	Artist string  `json:"artist"`
-	Price  float64 `json:"price"`
+var ORM orm.Ormer
+
+func init() {
+    models.ConnectToDb()
+    ORM = models.GetOrmObject()
 }
 
-var albums = []album{
-	{ID: "1", Title: "Blue Train", Artist: "John Coltrane", Price: 56.99},
-	{ID: "2", Title: "Jeru", Artist: "Gerry Mulligan", Price: 17.99},
-	{ID: "3", Title: "Sarah Vaughan and Clifford Brown", Artist: "Sarah Vaughan", Price: 39.99},
-}
-
-func getAlbums(c *gin.Context) {
-	c.IndentedJSON(http.StatusOK, albums)
-}
 
 func main() {
 	router := gin.Default()
-	router.GET("/albums", getAlbums)
-
-	router.Run("localhost:8080")
+	router.POST("/createUser", createUser)
+	router.GET("/readUsers", readUsers)
+	// router.PUT("/updateUser", updateUser)
+	router.DELETE("/deleteUser", deleteUser)
+	router.Run(":3000")
 }
 
-type Users struct {
-	UserId   int    `json:"user_id" orm:"auto"`
-	Email    string `json:"email" orm:"size(128)"`
-	Password string `json:"password" orm:"size(64)"`
-	UserName string `json:"user_name" orm:"size(32)"`
+
+
+
+func readUsers(c *gin.Context) {
+	var user []models.Users
+	fmt.Println(ORM)
+	_, err := ORM.QueryTable("users").All(&user)
+	if(err == nil) {
+			c.JSON(http.StatusOK, gin.H{"status": http.StatusOK, "users": &user})
+	} else {
+			c.JSON(http.StatusInternalServerError, 
+					gin.H{"status": http.StatusInternalServerError, "error": "Failed to read the users"})
+	}
 }
 
-var ormObject orm.Ormer
-
-// ConnectToDb - Initializes the ORM and Connection to the postgres DB
-func ConnectToDb() {
-    orm.RegisterDriver("postgres", orm.DRPostgres)
-    orm.RegisterDataBase("default", "postgres", "user=dbUser password=yourPassword dbname=dbName host=dbHost sslmode=disable")
-    orm.RegisterModel(new(Users))
-    ormObject = orm.NewOrm()
+func createUser(c *gin.Context) {
+	var newUser models.Users
+	c.BindJSON(&newUser)
+	_, err := ORM.Insert(&newUser)
+	if err == nil {
+			c.JSON(http.StatusOK, gin.H{
+					"status": http.StatusOK, 
+					"email": newUser.Email,
+					"user_name": newUser.UserName, 
+					"user_id": newUser.UserId})
+	} else {
+			c.JSON(http.StatusInternalServerError, 
+					gin.H{"status": http.StatusInternalServerError, "error": "Failed to create the user"})
+	} 
 }
 
-// GetOrmObject - Getter function for the ORM object with which we can query the database
-func GetOrmObject() orm.Ormer {
-    return ormObject
+func deleteUser(c *gin.Context) {
+	var delUser models.Users
+	c.BindJSON(&delUser)
+	_, err := ORM.QueryTable("users").Filter("email", delUser.Email).Delete()
+	if(err == nil) {
+			c.JSON(http.StatusOK, gin.H{"status": http.StatusOK})
+	} else {
+			c.JSON(http.StatusInternalServerError, 
+					gin.H{"status": http.StatusInternalServerError, "error": "Failed to delete the users"})
+	}
 }
